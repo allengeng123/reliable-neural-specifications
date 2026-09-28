@@ -13,8 +13,8 @@ cd reliable-neural-specifications
 module load python/3.11
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install 'numpy>=1.24,<2' 'pytest>=8,<9'
-python -m pip install -e .
+python -m pip install 'setuptools>=68' wheel 'numpy>=1.24,<2' 'pytest>=8,<9'
+python -m pip install --no-build-isolation -e .
 ```
 
 The cluster wheelhouse might not contain Marabou. Download its Python 3.11 Linux

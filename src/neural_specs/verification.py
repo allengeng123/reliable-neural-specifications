@@ -127,7 +127,8 @@ def check_inference(model, normalized_inputs):
     Marabou, _, _ = _backend()
     network = Marabou.read_nnet(str(model.path), normalize=False)
     expected = model.forward(normalized_inputs)[0]
-    actual = np.asarray([network.evaluateWithoutMarabou([x.reshape(1, -1)])[0].reshape(-1)
+    actual = np.asarray([np.asarray(network.evaluateNNet(x.tolist(), normalize_inputs=False,
+                                                       normalize_outputs=False)).reshape(-1)
                          for x in normalized_inputs])
     np.testing.assert_allclose(actual, expected, rtol=1e-7, atol=1e-8)
     return {"samples": len(expected), "maximum_absolute_error": float(np.max(np.abs(actual - expected)))}
