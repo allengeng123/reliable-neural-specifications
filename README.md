@@ -1,159 +1,160 @@
 # Towards Reliable Neural Specifications
 
-**This is the reorganized code repository for the ICML 2023 Oral paper
+**Code for the ICML 2023 Oral paper
 [Towards Reliable Neural Specifications](https://icml.cc/virtual/2023/oral/25466).**
 
 Chuqin Geng, Nham Le, Xiaojie Xu, Zhaoyue Wang, Arie Gurfinkel, and Xujie Si.
 
-[ICML oral page](https://icml.cc/virtual/2023/oral/25466) ·
-[Paper and citation](https://proceedings.mlr.press/v202/geng23a.html) ·
-[PDF](https://proceedings.mlr.press/v202/geng23a/geng23a.pdf)
+[ICML oral](https://icml.cc/virtual/2023/oral/25466) ·
+[Paper](https://proceedings.mlr.press/v202/geng23a/geng23a.pdf) ·
+[Citation](https://proceedings.mlr.press/v202/geng23a.html)
 
-This focused edition reorganizes the ACAS Xu workflow from
-[VerifyNNE](https://github.com/allengeng123/VerifyNNE) and the related verification
-work in [Verify-Network](https://github.com/allengeng123/Verify-Network).
-It provides reusable extraction of **neural activation patterns (NAPs)** from
-pretrained **ReLU fully connected networks**, plus a small ACAS Xu
-demonstration checking output guarantees with **Marabou**.
+Extract **neural activation patterns (NAPs)** from pretrained ReLU fully
+connected networks and use them as specifications for neural network
+verification. The package supports `.nnet` and ONNX models, with runnable
+examples for **ACAS Xu** and **MNIST FCNs**.
 
-**Scope:** generic `.nnet` / ONNX ReLU FCN extraction, with ACAS Xu and the
-official VNN-COMP MNIST FC models as validation cases. Formal verification in
-this edition remains ACAS Xu focused. This does **not** reproduce the paper's
-large MNIST/CIFAR-10 tables, train models, or claim full aircraft-system safety.
-See [extraction guide](docs/extraction.md) and [migration notes](docs/migration.md).
+## Setup
 
-## Quick start
-
-Use **Python 3.11 on Linux** for the complete workflow. The pinned Marabou 2.0.0
-wheel also supports Python 3.10 on Linux. Core inference and pattern mining work
-without Marabou, including on Windows.
+Use **Python 3.11 on Linux** for all features. A CPU is sufficient.
 
 ```bash
 git clone https://github.com/allengeng123/reliable-neural-specifications.git
 cd reliable-neural-specifications
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[verify,test]'
+python -m pip install -e '.[onnx,verify,test]'
 ```
 
-Run the bounded demonstration (one bundled network, one CPU, no GPU):
+For a smaller installation, `pip install -e .` provides NumPy-based `.nnet`
+inference and NAP mining. Add `[onnx]` for ONNX extraction, `[verify]` for
+Marabou verification, and `[test]` for the test suite. Core inference and mining
+also work on Windows; the verification examples use the Linux Marabou wheel.
+
+## Quick start: ACAS Xu
+
+Run the bundled pretrained network through mining and verification:
 
 ```bash
 python -m neural_specs demo
 ```
 
-For **Compute Canada / Digital Research Alliance**, use
-[the SSH and Slurm instructions](docs/compute-canada.md). Submit the experiment
-to a compute node instead of running it on the login node.
+The demo samples 2,048 inputs, mines class-specific NAPs, and evaluates their
+coverage on 512 held-out inputs. It then checks whether a mined NAP guarantees
+one advisory within a small input region, using Marabou to compare all four
+competing outputs. No training or model download is needed.
 
-The demo:
+Results are saved to:
 
-1. Loads the bundled `ACASXU_run2a_1_1_batch_2000.nnet` network in float64.
-2. Mines per-class NAPs from 2,048 seeded uniform samples and measures empirical
-   precision/recall on 512 separate samples. Labels are the model's **argmin**
-   predictions, not external ground truth.
-3. Cross-checks eight inference results against Marabou's independent evaluator.
-4. Selects the first held-out input matching its predicted class's mined NAP.
-5. Checks that its NAP region inside a normalized radius-0.001 box is nonempty,
-   then checks strict output dominance against all four competing advisories.
+- `results/demo/patterns.json` — selected neurons, activation states, and coverage.
+- `results/demo/report.json` — input region, solver outcomes, and witnesses.
 
-The local box makes this a small usability demonstration. It is explicitly
-recorded in the report; a local result is **not** a full-domain NAP certificate.
-Each solver query has a 30-second timeout. The default demo performs five
-queries: one feasibility query and four output queries.
+The default region is a normalized radius-0.001 box intersected with the NAP.
+A successful result certifies that region; each solver query has a 30-second
+timeout.
 
-Outputs are `results/demo/patterns.json` and `results/demo/report.json`.
-Reports record model SHA-256, seeds, dependency versions, sample counts, domain
-bounds, empirical coverage, solver statuses, elapsed times, and SAT witnesses.
+## How it works
 
-**Validated on Nibi:** 42 tests passed, extraction passed on all **45 ACAS Xu
-and three MNIST FC networks**, and the ACAS Xu Marabou regression still
-verified all four competing outputs. The complete one-CPU audit job took
-49 seconds. [Recorded runs and full JSON evidence](docs/validation.md).
+A NAP describes which hidden neurons should be active or inactive. Inputs
+sharing a pattern can be grouped even when they are far apart in input space.
 
-## Separate mining and verification
+1. **Collect activations.** Evaluate a pretrained model on labeled inputs and
+   record each hidden neuron's pre-ReLU value. Positive values are active;
+   zero and negative values are inactive.
+2. **Mine a pattern for each class.** Let `p` be a neuron's activation frequency.
+   Select it as active when `p >= delta`, or inactive when `p <= 1 - delta`.
+   Leave other neurons unconstrained. The default is `delta = 0.95`.
+3. **Evaluate or verify the pattern.** Measure empirical coverage on held-out
+   inputs, or ask a solver whether any input satisfying the pattern violates
+   the desired output property.
 
-Only NumPy is needed for mining:
+Mining follows Algorithm 1 of the paper. The threshold controls neuron
+selection; joint pattern recall is measured separately. Extraction supports
+arbitrary depths and widths of supported ReLU FCNs. See the
+[extraction guide](docs/extraction.md) for model formats and the streaming API.
+
+## Extract NAPs from your own model
+
+Prepare an NPZ file with an `inputs` array and an integer `labels` array, then run:
 
 ```bash
-python -m pip install -e .
-python -m neural_specs mine --samples 2048 --holdout 512 --delta 0.95 --seed 2023
+python -m neural_specs extract \
+  --model path/to/model.onnx --data path/to/data.npz \
+  --label-source provided --decision argmax --delta 0.95
 ```
 
-Optionally verify one mined class over the **full** normalized `.nnet` domain:
+The model can be `.nnet`, `.onnx`, or `.onnx.gz`. Supply inputs with the same
+preprocessing used by the pretrained model. Outputs are
+`results/extract/patterns.json` and `results/extract/counts.npz`.
+
+Use `--label-source provided` to group by dataset labels, or `predicted` to
+group by the model's decisions. **MNIST uses `argmax`; ACAS Xu uses `argmin`.**
+These choices are explicit so extraction uses the intended class convention.
+
+## Example: MNIST fully connected networks
+
+Download the reference models and prepare small training/test datasets:
 
 ```bash
+python scripts/validate_extraction.py fetch
+python -m neural_specs extract \
+  --model benchmarks/cache/mnist-net_256x4.onnx.gz \
+  --data benchmarks/cache/mnist-train-1024.npz \
+  --label-source provided --decision argmax \
+  --delta 0.95 --output results/mnist
+```
+
+The example uses float32 pixels scaled to `[0, 1]`. Replace `256x4` with
+`256x2` or `256x6` to use the other official VNN-COMP 2022 MNIST FC models.
+The fetch command also downloads the ACAS Xu reference models used by the
+validation suite. Downloaded assets stay in `benchmarks/cache/`.
+
+## Verify an ACAS Xu pattern
+
+Mine patterns and check one class over the model's full input domain:
+
+```bash
+python -m neural_specs mine --delta 0.95 --seed 2023
 python -m neural_specs verify \
   --patterns results/mine/patterns.json --label 0 --timeout 30
 ```
 
-Full-domain queries can produce counterexamples or time out. Neither means the
-program failed, and neither is reported as verified. `--model path/to/model.nnet`
-supports another ACAS Xu network without editing source files. Run commands
-from the repository root or pass an explicit model path.
-
-## Extract from another pretrained FCN
-
-The `extract` command accepts arbitrary hidden-layer depths and widths, keeping
-neuron identities from the actual model. Provide an NPZ dataset with `inputs`
-and, for dataset-label grouping, integer `labels`:
-
-```bash
-python -m pip install -e '.[onnx]'
-python -m neural_specs extract \
-  --model path/to/pretrained.onnx --data path/to/data.npz \
-  --label-source provided --decision argmax --delta 0.95
-```
-
-Use `--label-source predicted --decision argmin` for ACAS Xu model predictions;
-use `argmax` for MNIST. The choice is explicit and never inferred from a model
-filename. `.nnet`, `.onnx`, and `.onnx.gz` are supported. See the
-[guide](docs/extraction.md) for MNIST commands, preprocessing, the streaming
-Python API, supported graph formats, and the exact Algorithm 1 conventions.
-
-The official MNIST FC benchmark is in **VNN-COMP 2022**, with 256×2, 256×4,
-and 256×6 networks. The official 2023 repository contains ACAS Xu but no
-`mnist_fc` category; benchmark years are recorded separately in the audit.
-
-## Verification outcomes
+Use `--model path/to/network.nnet` on both commands for another ACAS Xu model.
+Verification checks that the target advisory has a strictly lower score than
+every competitor. An output tie counts as a violation.
 
 | Result | Meaning |
 | --- | --- |
-| `verified` | Region is feasible; all competing-output queries are UNSAT |
-| `counterexample` | A SAT witness violates strict dominance, independently re-evaluated |
-| `empty_region` | The input bounds and NAP have no satisfying input |
-| `inconclusive` | A timeout, unknown result, or unvalidated witness prevents a conclusion |
+| `verified` | The region is feasible and every competing-output query is UNSAT |
+| `counterexample` | A validated input violates the output property |
+| `empty_region` | No input satisfies the bounds and pattern |
+| `inconclusive` | A timeout or unresolved query prevents a conclusion |
 
-Exit codes: `0` for successful extraction/mining or verified output, `2` for other completed
-verification outcomes, and `1` for invalid input/dependency/runtime failures.
-ACAS Xu chooses the **lowest** output; an output tie counts as a violation of
-the strict dominance property. See [method and numerical conventions](docs/method.md).
+Full-domain verification can return counterexamples or time out. Extraction
+supports both ACAS Xu and MNIST FCNs; the supplied formal verification workflow
+targets ACAS Xu. See [verification semantics](docs/method.md) for numerical
+conventions and margins.
 
-## Layout
-
-```text
-src/neural_specs/
-  nnet.py             .nnet loading, normalization, inference, activation traces
-  patterns.py         statistical mining, coverage, validated JSON interchange
-  extraction.py       streaming model-independent extraction and label policy
-  onnx_fcn.py         trace actual ONNX ReLU sites with ONNX Runtime
-  verification.py     Marabou queries and independent SAT-witness checks
-  cli.py              extract / mine / verify / demo commands
-data/acasxu/           one small model, checksum, and attribution
-scripts/compute_canada/acasxu.sbatch
-scripts/compute_canada/extraction.sbatch
-scripts/validate_extraction.py  pinned benchmark downloads and extraction audit
-tests/                synthetic unit and solver integration tests
-docs/                 method, migration, and cluster instructions
-```
+## Tests and reference results
 
 ```bash
-python -m pytest -q                 # includes solver tests when Marabou is installed
-python -m pytest -q -m 'not solver' # core-only checks
+python -m pytest -q
 ```
 
-CI runs synthetic tests. ACAS Xu experiment evidence, when available, is recorded
-in [validation notes](docs/validation.md).
+The validation suite covers 45 ACAS Xu networks and three MNIST FCNs, checking
+activation traces, Algorithm 1 results, and consistency across batch sizes.
+All 42 tests and the 48-model extraction checks pass in the recorded reference
+run. See [validation and reproduction](docs/validation.md).
+
+## Project structure
+
+```text
+src/neural_specs/     Model loading, activation tracing, mining, and verification
+data/acasxu/         Bundled ACAS Xu model
+scripts/             Benchmark preparation and validation
+tests/               Unit and integration tests
+docs/                Extraction, verification, and reproduction guides
+```
 
 ## Citation
 
@@ -172,8 +173,4 @@ in [validation notes](docs/validation.md).
 }
 ```
 
-## Attribution
-
-See [NOTICE](NOTICE.md) for the historical source commits, third-party model
-attribution, and licensing status. The bundled model retains its CC BY 4.0
-notice. This cleanup does not relicense either historical repository.
+Model attribution and licensing information are in [NOTICE](NOTICE.md).

@@ -1,6 +1,6 @@
 # Correct NAP extraction from pretrained FCNs
 
-## Algorithm 1 and the audit fixes
+## Algorithm 1
 
 The paper's Definition 3.1 calls a neuron active exactly when its preactivation
 is **strictly positive**. Zero is inactive. Given a class-specific set `S_l`,
@@ -16,17 +16,15 @@ Require `0.5 < delta <= 1` to avoid overlapping selected states. This is the
 statistical mining algorithm; its per-neuron thresholds do not guarantee
 joint pattern recall of `delta`.
 
-Two issues in the first cleanup have been corrected:
+Thresholds are interpreted as exact decimals and converted to integer count
+cutoffs. For example, at `delta=0.9`, a neuron active in exactly one of ten
+samples belongs to the inactive set. Integer cutoffs preserve inclusive
+boundaries without floating-point subtraction errors, regardless of how the
+dataset is split into batches.
 
-1. Binary floating-point subtraction made `1 - 0.9` slightly smaller than
-   `0.1`, incorrectly excluding a neuron active in exactly one of ten samples.
-   Extraction now converts the supplied decimal threshold to an exact rational
-   and computes integer count cutoffs. Streaming batch partitions cannot alter
-   those cutoffs or accumulated counts.
-2. Empirical matching treated zero as active as well as inactive. It now uses
-   `> 0` / `<= 0` consistently with extraction. The verifier explicitly opts
-   into a conservative closed region (`>= 0` / `<= 0`); that relaxation is
-   separate from empirical NAP membership.
+Empirical matching uses `> 0` / `<= 0` consistently with extraction. The
+verifier explicitly uses a conservative closed region (`>= 0` / `<= 0`);
+that relaxation is separate from empirical NAP membership.
 
 The count accumulator stores integer support and active counts for each class.
 Memory for these statistics depends on classes × hidden neurons, not the
@@ -91,14 +89,14 @@ This follows the original benchmark's
 
 ## Runnable official MNIST FC example
 
-On the login node, fetch the pinned models/data and prepare small NPZ samples:
+Fetch the pinned models/data and prepare small NPZ samples:
 
 ```bash
 python -m pip install -e '.[onnx,test]'
 python scripts/validate_extraction.py fetch
 ```
 
-On a compute node, extract a NAP using actual training labels:
+Extract a NAP using the training labels:
 
 ```bash
 python -m neural_specs extract \
@@ -112,7 +110,7 @@ Substitute `256x2` or `256x6` for the other official models. Results include
 `patterns.json` with model/data digests, preprocessing, label policy, class
 support and neuron layout, and `counts.npz` with integer sufficient statistics.
 Full training datasets can be supplied through the same API; these prepared
-1,024 training and 256 test examples are for a bounded usability audit.
+1,024 training and 256 test examples provide a small reproducible example.
 
 ## Streaming Python API
 
@@ -138,10 +136,9 @@ streaming input storage.
 
 ## Validation scope
 
-The audit covers all **45 VNN-COMP 2023 ACAS Xu networks** and all **three
-VNN-COMP 2022 MNIST FC networks**. The 2023 official repository has no MNIST FC
-category; the models are not relabeled as 2023. Source commits and downloaded
-asset SHA-256 values are recorded.
+The reference checks cover all **45 VNN-COMP 2023 ACAS Xu networks** and all
+**three VNN-COMP 2022 MNIST FC networks**. Source commits and downloaded asset
+SHA-256 values are recorded for reproducibility.
 
 For every model, it checks instrumentation against original graph outputs,
 every ReLU's pre/post sign relationship, an independent ONNX reference
@@ -152,6 +149,6 @@ compares the bundled `.nnet` ACAS Xu model with its ONNX counterpart and reruns
 the original small Marabou demonstration. See the recorded validation results
 in [validation notes](validation.md).
 
-The audit tests **extraction correctness and portability**. It does not assert
+The suite tests **extraction correctness and portability**. It does not assert
 that every extracted NAP has high precision, high recall, or a successful
 formal robustness proof; those are separate empirical/verification questions.

@@ -1,8 +1,7 @@
 # Run on Compute Canada / the Digital Research Alliance
 
-Use your existing SSH configuration, for example `ssh nibi`. Complete Duo MFA
-interactively. No SSH keys, account identifiers, or authentication data belong
-in this repository.
+This optional guide describes CPU jobs on Alliance clusters using Slurm.
+Connect to your cluster with your usual SSH configuration.
 
 On the login node, prepare an environment and clone into scratch:
 
@@ -33,9 +32,8 @@ Nibi's StdEnv/2023 Python rejects the wheel's manylinux platform tag under a
 normal install. The explicit platform installs only this pinned wheel into an
 isolated directory, without replacing the Alliance's NumPy. The batch script
 adds that directory to `PYTHONPATH` and requires the native import to succeed
-before testing. This setup must be validated on the target cluster; an import
-failure is not a reason to ignore failed tests. The download script is pinned
-to Linux x86-64 / CPython 3.11, matching this job's module.
+before testing. The download script is pinned to Linux x86-64 / CPython 3.11,
+matching the job's module.
 
 Submit from the repository root with your CPU allocation:
 
@@ -62,7 +60,7 @@ the report was written but the property was not certified. It may indicate a
 counterexample, an empty region, or an inconclusive query; read the JSON status.
 `NEURAL_SPECS_VENV` can point to an existing environment if needed.
 
-## FCN extraction audit: ACAS Xu and MNIST
+## Validate FCN extraction: ACAS Xu and MNIST
 
 Prepare the optional inference dependencies and benchmark assets on the login
 node, using the same environment as above:
@@ -73,9 +71,8 @@ python scripts/validate_extraction.py fetch
 sbatch --account=YOUR_CPU_ALLOCATION scripts/compute_canada/extraction.sbatch
 ```
 
-This bounded audit requests one CPU, 2 GiB, and 15 minutes. It checks all 45
+This job requests one CPU, 2 GiB, and 15 minutes. It checks all 45
 ACAS Xu models with 64 inputs each, and the three official MNIST FC models with
-1,024 training and 256 held-out images. It trains no model and runs no full
-robustness benchmark sweep. The script performs the synthetic tests, extraction
-audit, and original ACAS Xu Marabou regression in one job. Its result is
+1,024 training and 256 held-out images. The script performs the synthetic tests,
+extraction checks, and ACAS Xu Marabou example in one job. Its result is
 `results/extraction-JOB_ID.json`.
