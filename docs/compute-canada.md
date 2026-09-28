@@ -22,8 +22,20 @@ wheel from PyPI on the login node, verify the published digest, and install it:
 
 ```bash
 python scripts/compute_canada/download_marabou.py
-python -m pip install ./maraboupy-2.0.0-cp311-cp311-manylinux*.whl
+python -m pip install --no-deps --target "$VIRTUAL_ENV/marabou" \
+  --platform manylinux2014_x86_64 \
+  ./maraboupy-2.0.0-cp311-cp311-manylinux*.whl
+export PYTHONPATH="$VIRTUAL_ENV/marabou${PYTHONPATH:+:$PYTHONPATH}"
+python -c 'from maraboupy import MarabouCore; print("Marabou native import OK")'
 ```
+
+Nibi's StdEnv/2023 Python rejects the wheel's manylinux platform tag under a
+normal install. The explicit platform installs only this pinned wheel into an
+isolated directory, without replacing the Alliance's NumPy. The batch script
+adds that directory to `PYTHONPATH` and requires the native import to succeed
+before testing. This setup must be validated on the target cluster; an import
+failure is not a reason to ignore failed tests. The download script is pinned
+to Linux x86-64 / CPython 3.11, matching this job's module.
 
 Submit from the repository root with your CPU allocation:
 

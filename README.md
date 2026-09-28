@@ -64,6 +64,10 @@ Outputs are `results/demo/patterns.json` and `results/demo/report.json`.
 Reports record model SHA-256, seeds, dependency versions, sample counts, domain
 bounds, empirical coverage, solver statuses, elapsed times, and SAT witnesses.
 
+**Validated on Nibi:** 23 tests passed; the demo's NAP region was SAT and all
+four competing-output queries were UNSAT. The one-CPU Slurm job finished in
+four seconds. [Recorded run and full JSON evidence](docs/validation.md).
+
 ## Separate mining and verification
 
 Only NumPy is needed for mining:

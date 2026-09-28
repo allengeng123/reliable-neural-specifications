@@ -10,6 +10,10 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?Submit this job from the repository root}"
 module load python/3.11
 source "${NEURAL_SPECS_VENV:-.venv}/bin/activate"
+if [[ -d "$VIRTUAL_ENV/marabou" ]]; then
+    export PYTHONPATH="$VIRTUAL_ENV/marabou${PYTHONPATH:+:$PYTHONPATH}"
+fi
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+python -c 'from maraboupy import MarabouCore; print("Marabou native import OK")'
 python -m pytest -q
 python -m neural_specs demo --output "results/slurm-${SLURM_JOB_ID}" --timeout 30
