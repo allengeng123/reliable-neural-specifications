@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite Towards Reliable Neural Specifications (ICML 2023 Oral)."
+title: "Towards Reliable Neural Specifications — ACAS Xu code"
+type: software
+authors:
+  - family-names: Geng
+    given-names: Chuqin
+  - family-names: Le
+    given-names: Nham
+  - family-names: Xu
+    given-names: Xiaojie
+  - family-names: Wang
+    given-names: Zhaoyue
+  - family-names: Gurfinkel
+    given-names: Arie
+  - family-names: Si
+    given-names: Xujie
+repository-code: "https://github.com/allengeng123/reliable-neural-specifications"
+url: "https://icml.cc/virtual/2023/oral/25466"
+preferred-citation:
+  type: conference-paper
+  title: "Towards Reliable Neural Specifications"
+  authors:
+    - family-names: Geng
+      given-names: Chuqin
+    - family-names: Le
+      given-names: Nham
+    - family-names: Xu
+      given-names: Xiaojie
+    - family-names: Wang
+      given-names: Zhaoyue
+    - family-names: Gurfinkel
+      given-names: Arie
+    - family-names: Si
+      given-names: Xujie
+  year: 2023
+  collection-title: "Proceedings of the 40th International Conference on Machine Learning"
+  volume: 202
+  start: 11196
+  end: 11212
+  url: "https://proceedings.mlr.press/v202/geng23a.html"

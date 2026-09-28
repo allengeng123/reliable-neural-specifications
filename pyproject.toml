@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reliable-neural-specifications"
+version = "0.1.0"
+description = "ACAS Xu demonstration for Towards Reliable Neural Specifications (ICML 2023 Oral)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<2"]
+
+[project.optional-dependencies]
+verify = ["maraboupy==2.0.0"]
+test = ["pytest>=8,<9"]
+
+[project.scripts]
+neural-specs = "neural_specs.cli:main"
+
+[project.urls]
+Paper = "https://icml.cc/virtual/2023/oral/25466"
+Repository = "https://github.com/allengeng123/reliable-neural-specifications"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["solver: requires the optional Marabou solver"]
