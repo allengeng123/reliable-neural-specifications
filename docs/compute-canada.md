@@ -61,3 +61,21 @@ A nonzero job status must be investigated. A verification exit code of 2 means
 the report was written but the property was not certified. It may indicate a
 counterexample, an empty region, or an inconclusive query; read the JSON status.
 `NEURAL_SPECS_VENV` can point to an existing environment if needed.
+
+## FCN extraction audit: ACAS Xu and MNIST
+
+Prepare the optional inference dependencies and benchmark assets on the login
+node, using the same environment as above:
+
+```bash
+python -m pip install 'onnx>=1.16,<1.18' 'onnxruntime>=1.18,<1.21'
+python scripts/validate_extraction.py fetch
+sbatch --account=YOUR_CPU_ALLOCATION scripts/compute_canada/extraction.sbatch
+```
+
+This bounded audit requests one CPU, 2 GiB, and 15 minutes. It checks all 45
+ACAS Xu models with 64 inputs each, and the three official MNIST FC models with
+1,024 training and 256 held-out images. It trains no model and runs no full
+robustness benchmark sweep. The script performs the synthetic tests, extraction
+audit, and original ACAS Xu Marabou regression in one job. Its result is
+`results/extraction-JOB_ID.json`.

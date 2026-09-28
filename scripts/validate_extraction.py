@@ -65,6 +65,9 @@ def fetch(root):
         manifest[name] = {"url": url, "sha256": digest}
         print(f"Fetched {name}", flush=True)
     write_json(root / "sources.json", manifest)
+    for split, limit in (("train", 1024), ("test", 256)):
+        images, labels = mnist(root, split, limit)
+        np.savez_compressed(root / f"mnist-{split}-{limit}.npz", inputs=images, labels=labels)
 
 
 def mnist(root, split, limit):

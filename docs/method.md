@@ -2,13 +2,19 @@
 
 ## Mining
 
-For each predicted class, count the fraction `p` of samples for which a hidden
+For each supplied or predicted class, count the fraction `p` of samples for which a hidden
 neuron's preactivation is strictly positive. Select an active state if
 `p >= delta` and an inactive state if `p <= 1 - delta`, with
 `0.5 < delta <= 1`. Other neurons remain unconstrained. This implements the
 frequency rule in Algorithm 1 of the paper. The actual joint pattern coverage
 is measured separately; per-neuron frequencies do not imply joint recall of
 at least `delta`.
+
+Decimal thresholds are compared through exact integer count cutoffs, avoiding
+floating-point subtraction at inclusive boundaries. Empirical membership uses
+the same strict-positive activation rule as mining; zero is inactive.
+The general [FCN extraction guide](extraction.md) explains the adapters,
+explicit label policies, and model-specific preprocessing.
 
 Neurons are indexed in hidden-layer order, then within each layer. Pattern files
 store binary states, positive class support, model SHA-256, and architecture.

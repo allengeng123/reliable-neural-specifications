@@ -12,13 +12,15 @@ Chuqin Geng, Nham Le, Xiaojie Xu, Zhaoyue Wang, Arie Gurfinkel, and Xujie Si.
 This focused edition reorganizes the ACAS Xu workflow from
 [VerifyNNE](https://github.com/allengeng123/VerifyNNE) and the related verification
 work in [Verify-Network](https://github.com/allengeng123/Verify-Network).
-It provides a small, reproducible demonstration of mining **neural activation
-patterns (NAPs)** and checking their output guarantees with **Marabou**.
+It provides reusable extraction of **neural activation patterns (NAPs)** from
+pretrained **ReLU fully connected networks**, plus a small ACAS Xu
+demonstration checking output guarantees with **Marabou**.
 
-**Scope:** ACAS Xu only. The published paper reports MNIST and CIFAR-10
-experiments; this ACAS Xu demonstration does **not** reproduce those tables,
-train a model, or claim full aircraft-system safety. The original repositories
-remain the historical sources. See [migration notes](docs/migration.md).
+**Scope:** generic `.nnet` / ONNX ReLU FCN extraction, with ACAS Xu and the
+official VNN-COMP MNIST FC models as validation cases. Formal verification in
+this edition remains ACAS Xu focused. This does **not** reproduce the paper's
+large MNIST/CIFAR-10 tables, train models, or claim full aircraft-system safety.
+See [extraction guide](docs/extraction.md) and [migration notes](docs/migration.md).
 
 ## Quick start
 
@@ -64,9 +66,10 @@ Outputs are `results/demo/patterns.json` and `results/demo/report.json`.
 Reports record model SHA-256, seeds, dependency versions, sample counts, domain
 bounds, empirical coverage, solver statuses, elapsed times, and SAT witnesses.
 
-**Validated on Nibi:** 23 tests passed; the demo's NAP region was SAT and all
-four competing-output queries were UNSAT. The one-CPU Slurm job finished in
-four seconds. [Recorded run and full JSON evidence](docs/validation.md).
+**Validated on Nibi:** 42 tests passed, extraction passed on all **45 ACAS Xu
+and three MNIST FC networks**, and the ACAS Xu Marabou regression still
+verified all four competing outputs. The complete one-CPU audit job took
+49 seconds. [Recorded runs and full JSON evidence](docs/validation.md).
 
 ## Separate mining and verification
 
@@ -89,6 +92,31 @@ program failed, and neither is reported as verified. `--model path/to/model.nnet
 supports another ACAS Xu network without editing source files. Run commands
 from the repository root or pass an explicit model path.
 
+## Extract from another pretrained FCN
+
+The `extract` command accepts arbitrary hidden-layer depths and widths, keeping
+neuron identities from the actual model. Provide an NPZ dataset with `inputs`
+and, for dataset-label grouping, integer `labels`:
+
+```bash
+python -m pip install -e '.[onnx]'
+python -m neural_specs extract \
+  --model path/to/pretrained.onnx --data path/to/data.npz \
+  --label-source provided --decision argmax --delta 0.95
+```
+
+Use `--label-source predicted --decision argmin` for ACAS Xu model predictions;
+use `argmax` for MNIST. The choice is explicit and never inferred from a model
+filename. `.nnet`, `.onnx`, and `.onnx.gz` are supported. See the
+[guide](docs/extraction.md) for MNIST commands, preprocessing, the streaming
+Python API, supported graph formats, and the exact Algorithm 1 conventions.
+
+The official MNIST FC benchmark is in **VNN-COMP 2022**, with 256×2, 256×4,
+and 256×6 networks. The official 2023 repository contains ACAS Xu but no
+`mnist_fc` category; benchmark years are recorded separately in the audit.
+
+## Verification outcomes
+
 | Result | Meaning |
 | --- | --- |
 | `verified` | Region is feasible; all competing-output queries are UNSAT |
@@ -96,7 +124,7 @@ from the repository root or pass an explicit model path.
 | `empty_region` | The input bounds and NAP have no satisfying input |
 | `inconclusive` | A timeout, unknown result, or unvalidated witness prevents a conclusion |
 
-Exit codes: `0` for successful mining or verified output, `2` for other completed
+Exit codes: `0` for successful extraction/mining or verified output, `2` for other completed
 verification outcomes, and `1` for invalid input/dependency/runtime failures.
 ACAS Xu chooses the **lowest** output; an output tie counts as a violation of
 the strict dominance property. See [method and numerical conventions](docs/method.md).
@@ -107,10 +135,14 @@ the strict dominance property. See [method and numerical conventions](docs/metho
 src/neural_specs/
   nnet.py             .nnet loading, normalization, inference, activation traces
   patterns.py         statistical mining, coverage, validated JSON interchange
+  extraction.py       streaming model-independent extraction and label policy
+  onnx_fcn.py         trace actual ONNX ReLU sites with ONNX Runtime
   verification.py     Marabou queries and independent SAT-witness checks
-  cli.py              mine / verify / demo commands
+  cli.py              extract / mine / verify / demo commands
 data/acasxu/           one small model, checksum, and attribution
 scripts/compute_canada/acasxu.sbatch
+scripts/compute_canada/extraction.sbatch
+scripts/validate_extraction.py  pinned benchmark downloads and extraction audit
 tests/                synthetic unit and solver integration tests
 docs/                 method, migration, and cluster instructions
 ```

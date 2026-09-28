@@ -27,10 +27,16 @@ Correctness and usability changes:
 - Use Windows-safe paths and regenerate small seeded samples rather than copying
   the legacy `AcasNetID<1,1>-*.pt` files.
 
-Excluded from this edition: image datasets and large experiments, old generated
+Excluded from this edition: vendored image datasets and large experiments, old generated
 results, notebooks, TinyAbsInt research scaffolding, all 45-network sweeps,
 training, and data-dependent absolute filesystem paths. The original links
 preserve access to historical material.
+
+The subsequent extraction audit adds an optional downloader for the three
+official MNIST FC models and small MNIST samples, plus all 45 ACAS Xu ONNX
+models. These assets remain outside Git in `benchmarks/cache/`. Extraction is
+now model-independent; formal verification remains ACAS Xu focused. See
+[the extraction guide](extraction.md) for the corrected Algorithm 1 semantics.
 
 ## Pinned historical sources
 
