@@ -67,6 +67,14 @@ class NNet:
     def hidden_size(self):
         return sum(self.sizes[1:-1])
 
+    @property
+    def trace_layout(self):
+        offset, layout = 0, []
+        for layer, width in enumerate(self.sizes[1:-1]):
+            layout.append({"name": f"hidden_{layer}", "width": width, "offset": offset})
+            offset += width
+        return layout
+
     def normalize(self, physical_inputs):
         """Clip physical inputs to the declared domain, without mutating the caller."""
         x = self._inputs(physical_inputs)

@@ -11,3 +11,4 @@ results/
 *.err
 .coverage
 *.whl
+benchmarks/cache/

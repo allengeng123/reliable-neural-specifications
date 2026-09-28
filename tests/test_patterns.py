@@ -45,8 +45,9 @@ def test_invalid_pattern_rejected(pattern):
         pattern.validate(5, 2)
 
 
-def test_closed_boundary_and_margin():
+def test_paper_boundary_and_explicit_solver_closure():
     active, inactive = Pattern(0, (0,), (1,), 1), Pattern(1, (0,), (0,), 1)
-    assert active.matches([[0]])[0] and inactive.matches([[0]])[0]
+    assert not active.matches([[0]])[0] and inactive.matches([[0]])[0]
+    assert active.matches([[0]], closed=True)[0]
     assert not active.matches([[0]], margin=0.001)[0]
     assert not inactive.matches([[0]], margin=0.001)[0]

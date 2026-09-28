@@ -24,7 +24,7 @@ def _positive(value):
 
 def environment():
     result = {"python": platform.python_version(), "platform": platform.platform()}
-    for package in ("numpy", "maraboupy", "reliable-neural-specifications"):
+    for package in ("numpy", "maraboupy", "onnx", "onnxruntime", "reliable-neural-specifications"):
         try:
             result[package] = version(package)
         except PackageNotFoundError:
@@ -58,6 +58,15 @@ def mining_run(model, samples, holdout, seed, delta, batch_size=256):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="ACAS Xu NAPs — ICML 2023 Oral: Towards Reliable Neural Specifications")
     sub = parser.add_subparsers(dest="command", required=True)
+    extraction = sub.add_parser("extract", help="extract NAPs from any supported pretrained ReLU FCN and supplied dataset")
+    extraction.add_argument("--model", required=True)
+    extraction.add_argument("--data", type=Path, required=True, help="NPZ with inputs and optional labels; pickle is disabled")
+    extraction.add_argument("--label-source", choices=("provided", "predicted"), required=True)
+    extraction.add_argument("--decision", choices=("argmin", "argmax"), required=True)
+    extraction.add_argument("--input-space", choices=("model", "physical"), default="model")
+    extraction.add_argument("--delta", default="0.95", help="decimal threshold, 0.5 < delta <= 1")
+    extraction.add_argument("--batch-size", type=_positive, default=256)
+    extraction.add_argument("--output", type=Path, default=Path("results/extract"))
     for command in ("mine", "demo", "verify"):
         cmd = sub.add_parser(command)
         cmd.add_argument("--model", default=DEFAULT_MODEL, help="path to a .nnet model (default relative to repository root)")
@@ -78,6 +87,29 @@ def main(argv=None):
             cmd.add_argument("--label", type=int, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "extract":
+            from .extraction import array_batches, extract, load_model
+            import hashlib
+            model = load_model(args.model)
+            with np.load(args.data, allow_pickle=False) as dataset:
+                if "inputs" not in dataset:
+                    raise ValueError("NPZ must contain an inputs array")
+                inputs = dataset["inputs"]
+                labels = dataset["labels"] if "labels" in dataset else None
+            if args.input_space == "physical":
+                if not isinstance(model, NNet):
+                    raise ValueError("Physical input normalization is only defined by .nnet headers")
+                inputs = model.normalize(inputs)
+            result = extract(model, array_batches(inputs, labels, args.batch_size),
+                             label_source=args.label_source, decision=args.decision, delta=args.delta)
+            result.metadata.update({"environment": environment(), "input_space": args.input_space,
+                                    "data_sha256": hashlib.sha256(args.data.read_bytes()).hexdigest(),
+                                    "preprocessing": "caller supplies model-ready inputs; physical .nnet inputs are normalized only when requested"})
+            save_patterns(args.output / "patterns.json", model, result.patterns, result.metadata)
+            args.output.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(args.output / "counts.npz", active=result.counts.active, support=result.counts.support)
+            print(json.dumps(result.metadata, indent=2))
+            return 0
         model = NNet.load(args.model)
         if model.sizes[0] != 5 or model.sizes[-1] != 5:
             raise ValueError("This CLI is for ACAS Xu models with five inputs and five outputs")

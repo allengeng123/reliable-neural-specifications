@@ -1,6 +1,7 @@
 """Algorithm 1: mine per-class activation frequencies, then select stable states."""
 
 from dataclasses import asdict, dataclass
+from fractions import Fraction
 import json
 from pathlib import Path
 
@@ -26,33 +27,74 @@ class Pattern:
         if any(type(s) is not int or s not in (0, 1) for s in self.states):
             raise ValueError("Pattern states must be binary, not activation counts")
 
-    def matches(self, preactivations, margin=0.0):
+    def matches(self, preactivations, margin=0.0, *, closed=False):
+        """Empirical NAP membership uses >0 / <=0, as in Definition 3.1.
+
+        ``closed=True`` is reserved for the verifier's conservative closure.
+        A positive margin restricts both states away from zero.
+        """
         values = np.asarray(preactivations)[:, self.indices]
         states = np.asarray(self.states, dtype=bool)
-        # Zero belongs to the closed active and inactive half-spaces at margin=0.
-        return np.all(np.where(states, values >= margin, values <= -margin), axis=1)
+        active = values >= margin if closed or margin > 0 else values > 0
+        return np.all(np.where(states, active, values <= -margin), axis=1)
+
+
+class ActivationCounts:
+    """Streaming sufficient statistics, independent of model, depth, or widths."""
+
+    def __init__(self, hidden_size, output_size):
+        if type(hidden_size) is not int or hidden_size < 0 or type(output_size) is not int or output_size < 1:
+            raise ValueError("Invalid hidden/output dimensions")
+        self.active = np.zeros((output_size, hidden_size), dtype=np.int64)
+        self.support = np.zeros(output_size, dtype=np.int64)
+
+    def update(self, preactivations, labels):
+        values, labels = np.asarray(preactivations), np.asarray(labels)
+        if values.ndim != 2 or values.shape[1] != self.active.shape[1] or labels.shape != (len(values),):
+            raise ValueError("Expected an activation matrix and one label per row")
+        if not np.all(np.isfinite(values)) or not np.issubdtype(labels.dtype, np.integer):
+            raise ValueError("Activations must be finite and labels must be integers")
+        if np.any(labels < 0) or np.any(labels >= len(self.support)):
+            raise ValueError("Labels outside output range")
+        for label in np.unique(labels):
+            selected = values[labels == label]
+            self.active[label] += np.count_nonzero(selected > 0, axis=0)
+            self.support[label] += len(selected)
+
+    def patterns(self, delta=0.95):
+        # Interpret the supplied decimal exactly: 1 - float(0.9) is below 0.1.
+        # Compute integer cutoffs with Python integers, avoiding roundoff and
+        # overflow from multiplying an int64 count by a large denominator.
+        try:
+            fraction = Fraction(str(delta))
+        except (ValueError, ZeroDivisionError) as exc:
+            raise ValueError("delta must satisfy 0.5 < delta <= 1") from exc
+        if not Fraction(1, 2) < fraction <= 1:
+            raise ValueError("delta must satisfy 0.5 < delta <= 1")
+        if not self.support.sum():
+            raise ValueError("Cannot mine patterns from an empty dataset")
+        numerator, denominator = fraction.numerator, fraction.denominator
+        result = []
+        for label, support in enumerate(self.support):
+            n = int(support)
+            if not n:
+                continue
+            active_cutoff = (numerator * n + denominator - 1) // denominator
+            inactive_cutoff = ((denominator - numerator) * n) // denominator
+            active = self.active[label] >= active_cutoff
+            inactive = self.active[label] <= inactive_cutoff
+            indices = np.flatnonzero(active | inactive)
+            result.append(Pattern(label, tuple(indices.tolist()), tuple(active[indices].astype(int).tolist()), n))
+        return result
 
 
 def mine(preactivations, labels, output_size, delta=0.95):
-    if not np.isfinite(delta) or not 0.5 < delta <= 1:
-        raise ValueError("delta must satisfy 0.5 < delta <= 1")
-    values, labels = np.asarray(preactivations), np.asarray(labels)
-    if values.ndim != 2 or labels.shape != (len(values),) or len(values) == 0:
-        raise ValueError("Expected a nonempty activation matrix and one label per row")
-    if not np.all(np.isfinite(values)) or not np.issubdtype(labels.dtype, np.integer):
-        raise ValueError("Activations must be finite and labels must be integers")
-    if np.any(labels < 0) or np.any(labels >= output_size):
-        raise ValueError("Labels outside output range")
-    result = []
-    for label in range(output_size):
-        selected = values[labels == label]
-        if not len(selected):
-            continue  # Missing classes are reported, never assigned an empty universal NAP.
-        frequency = (selected > 0).mean(axis=0)
-        active, inactive = frequency >= delta, frequency <= 1 - delta
-        indices = np.flatnonzero(active | inactive)
-        result.append(Pattern(label, tuple(indices.tolist()), tuple(active[indices].astype(int).tolist()), len(selected)))
-    return result
+    values = np.asarray(preactivations)
+    if values.ndim != 2:
+        raise ValueError("Expected an activation matrix")
+    counts = ActivationCounts(values.shape[1], output_size)
+    counts.update(values, labels)
+    return counts.patterns(delta)
 
 
 def coverage(patterns, preactivations, labels, margin=0.0):
@@ -71,6 +113,7 @@ def coverage(patterns, preactivations, labels, margin=0.0):
 def save_patterns(path, model, patterns, metadata):
     payload = {"schema_version": 1, "model_sha256": model.sha256,
                "layer_sizes": list(model.sizes), "metadata": metadata,
+               "trace_layout": getattr(model, "trace_layout", None),
                "patterns": [asdict(p) for p in patterns]}
     write_json(path, payload)
 
@@ -81,6 +124,8 @@ def load_patterns(path, model):
         raise ValueError("Pattern schema or model SHA-256 mismatch; mine patterns for this model")
     if data.get("layer_sizes") != list(model.sizes):
         raise ValueError("Pattern/model architecture mismatch")
+    if data.get("trace_layout") is not None and data["trace_layout"] != model.trace_layout:
+        raise ValueError("Pattern/model neuron layout mismatch")
     patterns = [Pattern(p["label"], tuple(p["indices"]), tuple(p["states"]), p["support"])
                 for p in data["patterns"]]
     for pattern in patterns:

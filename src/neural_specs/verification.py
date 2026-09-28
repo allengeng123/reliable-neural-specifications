@@ -64,7 +64,7 @@ def _witness(model, pattern, network, values, bounds, activation_margin, other=N
     lo, hi = _bounds(model, bounds)
     tolerance = 1e-6
     valid = bool(np.all(x >= lo - tolerance) and np.all(x <= hi + tolerance))
-    valid = valid and bool(pattern.matches(pre, activation_margin - tolerance)[0])
+    valid = valid and bool(pattern.matches(pre, activation_margin - tolerance, closed=True)[0])
     if other is not None:
         valid = valid and bool(scores[0, pattern.label] - scores[0, other] >= -output_margin - tolerance)
     return {"normalized_input": x.tolist(), "normalized_scores": scores[0].tolist(),
